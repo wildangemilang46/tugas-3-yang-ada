@@ -1,0 +1,193 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUM UNTUK AUTHORIZATION ROLE
+
+enum Role {
+  ADMIN
+  MEMBER
+  BUYER
+}
+
+model Book {
+  id        Int    @id @default(autoincrement())
+  title     String @db.LongText
+  author    String @db.LongText
+  publisher String @db.LongText
+  year      Int    @db.Int
+
+  @@map("books")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  CANCELLED
+}
+
+
+// USER MODEL DENGAN AUTHENTICATION DAN AUTHORIZATION
+
+model User {
+  id         Int       @id @default(autoincrement())
+  email      String    @unique
+  username   String    @unique
+  password   String
+  full_name  String?
+  phone      String?
+  gender     String?
+  dob        DateTime?
+  avatar     String?
+  role       Role      @default(MEMBER) //untuk authorization
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relasi
+  orders     Order[]
+  ratings    Rating[]
+  tokens     AuthToken[] // token login (opsional tapi berguna)
+
+  @@map("users")
+}
+
+// BUYER MODEL (DIBERI ROLE SECARA DEFAULT)
+
+model Buyer {
+  id              Int       @id @default(autoincrement())
+  phone           String?
+  username        String?
+  activation_code String?
+  expired         DateTime?
+  role            Role      @default(BUYER) // 🔐 role untuk buyer
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  orders  Order[]
+  ratings Rating[]
+
+  @@map("buyers")
+}
+
+model Voucher {
+  id            Int       @id @default(autoincrement())
+  name          String
+  code          String    @unique
+  expired_time  DateTime?
+  quantity      Int?      @default(0)
+  quantity_used Int?      @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orders Order[]
+
+  @@map("vouchers")
+}
+
+model Product {
+  id           Int      @id @default(autoincrement())
+  product_code String?  @unique
+  name         String
+  image        String?
+  price        Float
+  stock        Int?     @default(0)
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  detailOrders DetailOrder[]
+  ratings      Rating[]
+
+  @@map("products")
+}
+
+model Order {
+  id         Int          @id @default(autoincrement())
+  order_code String?      @unique
+  userId     Int?
+  buyerId    Int?
+  voucherId  Int?
+  total      Float        @default(0)
+  status     OrderStatus?
+  notes      String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user    User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  buyer   Buyer?        @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  voucher Voucher?      @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+  details DetailOrder[]
+  ratings Rating[]
+
+  @@index([userId])
+  @@index([buyerId])
+  @@index([voucherId])
+  @@map("orders")
+}
+
+model DetailOrder {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  price     Float
+  quantity  Int
+  subtotal  Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("detail_orders")
+}
+
+model Rating {
+  id        Int      @id @default(autoincrement())
+  orderId   Int?
+  productId Int
+  buyerId   Int?
+  userId    Int?
+  rating    Int
+  review    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyer   Buyer?  @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@index([orderId])
+  @@index([buyerId])
+  @@index([userId])
+  @@map("ratings")
+}
+
+
+// MODEL TAMBAHAN UNTUK TOKEN LOGIN
+
+model AuthToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  createdAt DateTime @default(now())
+  expiredAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_tokens")
+}
